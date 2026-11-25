@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 *.db
 *.db-shm
 *.db-wal
+
+# dotnet-ef on Linux sometimes writes build-host files to a folder literally named "bin\Debug"
+bin?Debug/

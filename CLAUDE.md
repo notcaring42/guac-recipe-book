@@ -31,6 +31,22 @@ This is an ASP.NET Core 11.0 minimal API project (C#). It uses the single-file `
   - `Migrations/` — EF Core migrations
   - OpenAPI/Swagger enabled in Development environment via `MapOpenApi()`
 
+## Authentication
+
+Cookie authentication (`recipe-book.auth` cookie); passwords are hashed with ASP.NET Core Identity's `PasswordHasher<User>`.
+
+- A **fallback authorization policy** requires a logged-in user on every endpoint. Endpoints that must be public (e.g. `/auth/login`) opt out with `.AllowAnonymous()`.
+- Admin-only endpoints use `.RequireAuthorization("Admin")` (role claim `Admin`, from `User.IsAdmin`).
+- Endpoints: `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /users` and `GET /users/{id}` (admin only).
+- On startup, `Data/AdminSeeder.cs` ensures an `admin` user exists with the password from the **`GUAC_ADMIN_PWD`** environment variable. The variable is required on first run (startup fails without it); afterwards, if it's set to a new value, the admin password is updated to match.
+- Usernames may use any script. Lookups and the unique index use `User.NormalizedUsername` (NFKC + `ToUpperInvariant`), never `Username` directly; create users with `User.Create(...)` so both columns are set.
+- **Session revocation:** each user has a `SecurityStamp`, copied into the cookie at login. `Auth/AuthCookie.ValidateAsync` checks it against the database on every request, so **any code that changes a user's password or admin flag must also set `SecurityStamp = User.NewSecurityStamp()`** to log out that user's existing sessions. Sessions also expire 7 days after login regardless of activity.
+- The cookie is `Secure` (HTTPS-only) outside Development.
+
+```bash
+GUAC_ADMIN_PWD='...' dotnet run --project recipe-book-api
+```
+
 ## Database
 
 Uses **Entity Framework Core** with **SQLite**. The DbContext is `recipe_book_api.Data.RecipeBookContext`.
