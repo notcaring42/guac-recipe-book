@@ -20,10 +20,10 @@ No test projects exist yet. No linter or formatter is configured.
 
 ## Architecture
 
-This is an ASP.NET Core 10.0 minimal API project (C#). It uses the single-file `Program.cs` approach (no controllers).
+This is an ASP.NET Core 11.0 minimal API project (C#). It uses the single-file `Program.cs` approach (no controllers).
 
 - **recipe-book.sln** — Solution file containing one project
-- **recipe-book-api/** — The API project (`net10.0`, root namespace: `recipe_book_api`)
+- **recipe-book-api/** — The API project (`net11.0`, root namespace: `recipe_book_api`)
   - `Program.cs` — Entry point, service registration, middleware pipeline, and route definitions
   - `Models/` — EF Core entities (e.g. `Food`)
   - `Data/` — `RecipeBookContext` (the DbContext)
