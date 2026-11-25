@@ -14,8 +14,8 @@ public static class AuthCookie
     /// <summary>A login lasts at most this long, even if sliding expiration keeps renewing it.</summary>
     public static readonly TimeSpan MaxSessionAge = TimeSpan.FromDays(7);
 
-    private const string SecurityStampClaim = "security_stamp";
-    private const string LoginTimeClaim = "login_time";
+    internal const string SecurityStampClaim = "security_stamp";
+    internal const string LoginTimeClaim = "login_time";
 
     public static ClaimsPrincipal CreatePrincipal(User user)
     {

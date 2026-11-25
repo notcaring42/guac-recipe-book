@@ -14,15 +14,18 @@ dotnet run --project recipe-book-api
 # Run with a specific launch profile
 dotnet run --project recipe-book-api --launch-profile http   # http://localhost:5007
 dotnet run --project recipe-book-api --launch-profile https  # https://localhost:7092
+
+# Run the tests
+dotnet test
 ```
 
-No test projects exist yet. No linter or formatter is configured.
+Tests live in `recipe-book-api.Tests/` (xUnit). Unit tests cover `User`, the auth DTOs, `AuthCookie` and `AdminSeeder` against an in-memory SQLite database (`TestDb`); `AuthEndpointTests` runs the real app via `WebApplicationFactory` against a temporary SQLite file. Tests run serially because they set the `GUAC_ADMIN_PWD` environment variable. No linter or formatter is configured.
 
 ## Architecture
 
 This is an ASP.NET Core 11.0 minimal API project (C#). It uses the single-file `Program.cs` approach (no controllers).
 
-- **recipe-book.sln** — Solution file containing one project
+- **recipe-book.sln** — Solution file containing the API and its test project
 - **recipe-book-api/** — The API project (`net11.0`, root namespace: `recipe_book_api`)
   - `Program.cs` — Entry point, service registration, middleware pipeline, and route definitions
   - `Models/` — EF Core entities (e.g. `Food`)
