@@ -27,4 +27,16 @@ This is an ASP.NET Core 10.0 minimal API project (C#). It uses the single-file `
   - `Program.cs` — Entry point, service registration, middleware pipeline, and route definitions
   - OpenAPI/Swagger enabled in Development environment via `MapOpenApi()`
 
-The project is freshly scaffolded from the ASP.NET Core template with no domain logic implemented yet. There is no database, authentication, or Docker configuration.
+## Database
+
+Uses **Entity Framework Core** with **SQLite**. The DbContext is `recipe_book_api.Data.RecipeBookContext`.
+
+Connection string is in `appsettings.json` (`DefaultConnection`), defaulting to a local `recipe-book.db` file.
+
+```bash
+# EF Core migrations (run from repo root)
+dotnet ef migrations add <MigrationName> --project recipe-book-api
+dotnet ef database update --project recipe-book-api
+```
+
+Note: Requires `dotnet-ef` tool installed globally (`dotnet tool install --global dotnet-ef`).
