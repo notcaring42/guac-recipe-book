@@ -16,4 +16,8 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="recipe-book-api.Tests" />
+  </ItemGroup>
+
 </Project>
