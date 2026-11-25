@@ -25,13 +25,19 @@ This is an ASP.NET Core 10.0 minimal API project (C#). It uses the single-file `
 - **recipe-book.sln** — Solution file containing one project
 - **recipe-book-api/** — The API project (`net10.0`, root namespace: `recipe_book_api`)
   - `Program.cs` — Entry point, service registration, middleware pipeline, and route definitions
+  - `Models/` — EF Core entities (e.g. `Food`)
+  - `Data/` — `RecipeBookContext` (the DbContext)
+  - `Dtos/` — Request/response records. Endpoints accept and return DTOs, never EF entities directly. Request DTOs carry their own `Validate()` method; endpoints return `Results.ValidationProblem(...)` on failure.
+  - `Migrations/` — EF Core migrations
   - OpenAPI/Swagger enabled in Development environment via `MapOpenApi()`
 
 ## Database
 
 Uses **Entity Framework Core** with **SQLite**. The DbContext is `recipe_book_api.Data.RecipeBookContext`.
 
-Connection string is in `appsettings.json` (`DefaultConnection`), defaulting to a local `recipe-book.db` file.
+Connection string is in `appsettings.json` (`DefaultConnection`), defaulting to `recipe-book.db`. A relative path is resolved against the project's content root, so the file always lives at `recipe-book-api/recipe-book.db` regardless of the working directory. The app fails at startup if the connection string is missing.
+
+Pending migrations are applied automatically on startup (`Database.Migrate()` in `Program.cs`), so `dotnet ef database update` is optional. After changing a model, you still need to add a migration:
 
 ```bash
 # EF Core migrations (run from repo root)
