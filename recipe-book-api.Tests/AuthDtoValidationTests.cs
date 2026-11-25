@@ -90,9 +90,36 @@ public class CreateUserRequestTests
     [InlineData("bob\nby")]
     [InlineData("bob\u2028by")] // line separator
     [InlineData("bob\u0000by")]
+    [InlineData("bob\U000E0020by")] // tag space (outside the BMP)
+    [InlineData("bob\U000E0041by")] // tag letter A
+    [InlineData("bob\uFE0Fby")] // variation selector
+    [InlineData("bob\U000E0100by")] // variation selector supplement
+    [InlineData("bob\u034Fby")] // combining grapheme joiner
+    [InlineData("bob\u3164by")] // Hangul filler
     public void InvisibleOrControlCharacters_AreRejected(string username)
     {
         Assert.Contains(nameof(CreateUserRequest.Username), new CreateUserRequest(username, GoodPassword).Validate().Keys);
+    }
+
+    [Fact]
+    public void UnpairedSurrogates_AreRejectedWithoutThrowing()
+    {
+        // Built in code: attribute strings are stored as UTF-8, which can't hold lone surrogates.
+        foreach (var lone in new[] { '\uD800', '\uDC00' })
+        {
+            var username = "bob" + lone + "by";
+
+            Assert.Contains(nameof(CreateUserRequest.Username), new CreateUserRequest(username, GoodPassword).Validate().Keys);
+        }
+    }
+
+    [Theory]
+    [InlineData("\U0001F951")] // avocado emoji: outside the BMP but visible
+    [InlineData("用户名")]
+    [InlineData("Ελένη")]
+    public void VisibleNonAsciiUsernames_AreAllowed(string username)
+    {
+        Assert.Empty(new CreateUserRequest(username, GoodPassword).Validate());
     }
 
     [Theory]

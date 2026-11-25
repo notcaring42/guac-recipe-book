@@ -11,21 +11,29 @@ using recipe_book_api.Models;
 namespace recipe_book_api.Tests;
 
 /// <summary>Runs the real app against a throwaway SQLite file, with a known admin password.</summary>
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public class ApiFactory : WebApplicationFactory<Program>
 {
     public const string AdminPassword = "test-admin-password";
 
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"recipe-book-tests-{Guid.NewGuid():N}.db");
     private readonly EnvVarScope _adminPassword = new(AdminSeeder.PasswordEnvVar, AdminPassword);
 
+    /// <summary>Login attempts allowed per client per window. High by default so tests aren't throttled.</summary>
+    protected virtual int LoginPermitLimit => 10_000;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:DefaultConnection", $"Data Source={_dbPath}");
+        builder.UseSetting("RateLimiting:Login:PermitLimit", LoginPermitLimit.ToString());
     }
 
-    public RecipeBookContext CreateDbContext() =>
-        Services.CreateScope().ServiceProvider.GetRequiredService<RecipeBookContext>();
+    /// <summary>Runs <paramref name="action"/> against the app's database in its own DI scope.</summary>
+    public async Task WithDbAsync(Func<RecipeBookContext, Task> action)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        await action(scope.ServiceProvider.GetRequiredService<RecipeBookContext>());
+    }
 
     protected override void Dispose(bool disposing)
     {
@@ -173,6 +181,18 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     }
 
     [Theory]
+    [InlineData("admin\U000E0020")] // tag space (outside the BMP)
+    [InlineData("admin️")] // variation selector
+    public async Task CreateUser_LookAlikeOfExistingUser_Returns400(string username)
+    {
+        var admin = await LoginAsAdminAsync();
+
+        var response = await admin.PostAsJsonAsync("/users", new CreateUserRequest(username, UserPassword));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
     [InlineData("ADMIN")]
     [InlineData("ａｄｍｉｎ")]
     public async Task CreateUser_WithNormalizedDuplicate_Returns409(string username)
@@ -222,12 +242,12 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     {
         var (client, username) = await CreateAndLoginUserAsync();
 
-        await using (var db = factory.CreateDbContext())
+        await factory.WithDbAsync(async db =>
         {
             var user = db.Users.Single(u => u.NormalizedUsername == User.NormalizeUsername(username));
             user.SecurityStamp = User.NewSecurityStamp();
             await db.SaveChangesAsync();
-        }
+        });
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/auth/me")).StatusCode);
     }
@@ -237,13 +257,13 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     {
         var (client, username) = await CreateAndLoginUserAsync();
 
-        await using (var db = factory.CreateDbContext())
+        await factory.WithDbAsync(async db =>
         {
             var user = db.Users.Single(u => u.NormalizedUsername == User.NormalizeUsername(username));
             user.IsAdmin = true;
             user.SecurityStamp = User.NewSecurityStamp();
             await db.SaveChangesAsync();
-        }
+        });
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/users/1")).StatusCode);
 
@@ -271,4 +291,32 @@ public sealed class AuthEndpointTests(ApiFactory factory) : IClassFixture<ApiFac
     }
 
     private static string UniqueName() => $"user-{Guid.NewGuid():N}"[..20];
+}
+
+/// <summary>An app instance with a tiny login limit, so throttling can be observed.</summary>
+public sealed class ThrottledApiFactory : ApiFactory
+{
+    public const int Limit = 3;
+
+    protected override int LoginPermitLimit => Limit;
+}
+
+public sealed class LoginRateLimitTests(ThrottledApiFactory factory) : IClassFixture<ThrottledApiFactory>
+{
+    [Fact]
+    public async Task Login_IsThrottledAfterLimit_EvenWithCorrectPassword()
+    {
+        var client = factory.CreateClient();
+
+        for (var i = 0; i < ThrottledApiFactory.Limit; i++)
+        {
+            var failed = await client.PostAsJsonAsync("/auth/login", new LoginRequest("admin", "wrong-password"));
+            Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
+        }
+
+        var throttled = await client.PostAsJsonAsync("/auth/login", new LoginRequest("admin", ApiFactory.AdminPassword));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, throttled.StatusCode);
+        Assert.False(throttled.Headers.Contains("Set-Cookie"));
+    }
 }

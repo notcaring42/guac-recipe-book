@@ -45,6 +45,7 @@ Cookie authentication (`recipe-book.auth` cookie); passwords are hashed with ASP
 - Usernames may use any script. Lookups and the unique index use `User.NormalizedUsername` (NFKC + `ToUpperInvariant`), never `Username` directly; create users with `User.Create(...)` so both columns are set.
 - **Session revocation:** each user has a `SecurityStamp`, copied into the cookie at login. `Auth/AuthCookie.ValidateAsync` checks it against the database on every request, so **any code that changes a user's password or admin flag must also set `SecurityStamp = User.NewSecurityStamp()`** to log out that user's existing sessions. Sessions also expire 7 days after login regardless of activity.
 - The cookie is `Secure` (HTTPS-only) outside Development.
+- `POST /auth/login` is rate-limited per client IP (default 10 attempts per 60 seconds, then `429`). Configure with `RateLimiting:Login:PermitLimit` and `RateLimiting:Login:WindowSeconds`.
 
 ```bash
 GUAC_ADMIN_PWD='...' dotnet run --project recipe-book-api

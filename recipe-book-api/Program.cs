@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using recipe_book_api.Auth;
@@ -68,6 +70,23 @@ builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
     .AddPolicy("Admin", policy => policy.RequireRole(AuthCookie.AdminRole));
 
+// Throttle login attempts per client IP to slow down password guessing. Limits are
+// configurable (RateLimiting:Login:PermitLimit / WindowSeconds) so tests can adjust them.
+var loginPermitLimit = builder.Configuration.GetValue("RateLimiting:Login:PermitLimit", 10);
+var loginWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimiting:Login:WindowSeconds", 60));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(LoginRateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = loginPermitLimit,
+            Window = loginWindow,
+            QueueLimit = 0,
+        }));
+});
+
 var app = builder.Build();
 
 // Apply any pending migrations so the schema exists on a fresh clone,
@@ -91,6 +110,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapPost("/auth/login", async (
     LoginRequest request,
@@ -128,7 +148,7 @@ app.MapPost("/auth/login", async (
     await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, AuthCookie.CreatePrincipal(user));
 
     return Results.Ok(new UserResponse(user.Id, user.Username, user.IsAdmin));
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting(LoginRateLimitPolicy);
 
 app.MapPost("/auth/logout", async (HttpContext http) =>
 {
@@ -225,3 +245,8 @@ app.MapDelete("/foods/{id:int}", async (int id, RecipeBookContext db) =>
 });
 
 app.Run();
+
+public partial class Program
+{
+    private const string LoginRateLimitPolicy = "login";
+}
